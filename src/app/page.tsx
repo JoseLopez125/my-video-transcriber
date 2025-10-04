@@ -2,7 +2,49 @@
 
 import { useState, useRef, ChangeEvent } from 'react';
 
+
 export default function HomePage() {
+  function uploadVideoToGCS(signedUrl, videoFile, gcsPath) {
+    fetch(signedUrl, {
+        method: 'PUT',
+        headers: { 
+            // Must match the content_type="video/*" from the Python function
+            'Content-Type': videoFile.type || 'video/mp4'
+        },
+        body: videoFile 
+    })
+    .then(res => {
+        if (res.ok) {
+            console.log("✅ Video uploaded directly to GCS!");
+            // Proceed to Step 3
+            triggerTranscription(gcsPath);
+        } else {
+            console.error("❌ GCS Upload Failed:", res.statusText);
+        }
+    });
+}
+// This function name (triggerTranscription) is defined by you.
+function triggerTranscription(gcsPath: string) {
+  const PROCESSING_URL = 'https://get-upload-url-t5ugakub7a-uc.a.run.app/start_processing'; 
+
+  // Make a final, light POST request to your backend processing function
+  fetch(PROCESSING_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+          // Send the GCS URI format so the Video Intelligence API can access it
+          gcsPath: `gs://myvideotranscriber-video-uploads/${gcsPath}`
+      })
+  })
+  .then(response => response.json())
+  .then(data => {
+      console.log("Processing complete. Transcript/DB response:", data);
+      // Display the transcript to the user
+  })
+  .catch(error => {
+      console.error("Error during final processing step:", error);
+  });
+}
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -17,6 +59,25 @@ export default function HomePage() {
     }
 
     setSelectedFile(file);
+    // Assuming 'videoFile' is the File object from your drag-and-drop
+    const GCS_FILENAME = `user-videos/${Date.now()}-${file}`;
+    const FUNCTION_URL = 'https://get-upload-url-t5ugakub7a-uc.a.run.app'; // Replace this URL
+    const fileContentType = file.type ? file.type : 'video/mp4'; 
+
+    fetch(FUNCTION_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: GCS_FILENAME, 'Content-Type': fileContentType })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.uploadUrl) {
+            // Proceed to Step 2
+            uploadVideoToGCS(data.uploadUrl, selectedFile, GCS_FILENAME);
+        } else {
+            console.error("Server denied upload:", data.error);
+        }
+    });
   };
 
   return (

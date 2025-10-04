@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, ChangeEvent } from 'react';
 
 export default function HomePage() {
-  const [selectedFile, setSelectedFile] = useState(null);
-  const fileInputRef = useRef(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
+  const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
 
     const validTypes = ['video/mp4', 'video/quicktime', 'audio/mpeg'];
@@ -68,7 +68,7 @@ export default function HomePage() {
             cursor: 'pointer',
             width: '300px',
           }}
-          onClick={() => fileInputRef.current.click()}
+          onClick={() => fileInputRef.current?.click()}
         >
           <p>Drag & Drop or Click to Upload</p>
           <p style={{ fontSize: '12px', color: '#555' }}>.mp4, .mov, .mp3 only</p>

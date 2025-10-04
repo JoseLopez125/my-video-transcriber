@@ -55,7 +55,7 @@ def get_upload_url(req: https_fn.Request):
         print(f"Error generating signed URL: {e}")
         return https_fn.Response(json.dumps({"error": str(e)}), status=500)
 
-def get_transcript():
+def get_transcript(file_path:str):
     video_client = videointelligence.VideoIntelligenceServiceClient()
     features = [videointelligence.Feature.SPEECH_TRANSCRIPTION]
 
@@ -67,7 +67,7 @@ def get_transcript():
     operation = video_client.annotate_video(
         request={
             "features": features,
-            "input_uri": path,
+            "input_uri": f"gs://{BUCKET_NAME}/{file_path}",
             "video_context": video_context,
         }
     )
@@ -102,8 +102,23 @@ def get_transcript():
                         word,
                     )
                 )
+    @https_fn.on_request()
+    def start_processing(req: https_fn.Request):
+        """Triggers the transcription process and saves the video reference."""
+        body = req.get_json(silent=True)
+        gcs_path = body.get("gcsPath")
+        
+        if not gcs_path:
+            return https_fn.Response(json.dumps({"error": "Missing GCS path"}), status=400)
+            
+        # 1. Update the 'path' variable in get_transcript to use gcs_path
+        # 2. Call get_transcript(gcs_path) (You need to modify get_transcript to accept path)
+        # 3. Save gcs_path to your database here.
+        
+        return https_fn.Response(json.dumps({"status": "Processing started"}), status=200, mimetype="application/json")
 
-# initialize_app()
+
+initialize_app()
 #
 #
 # @https_fn.on_request()

@@ -1,4 +1,6 @@
-firebase_functions~=0.1.
-
+# functions/requirements.txt
+firebase-functions~=0.1
+firebase-admin         # Required for initialize_app() and other Firebase services
 google-cloud-storage
 google-cloud-videointelligence
+requests  

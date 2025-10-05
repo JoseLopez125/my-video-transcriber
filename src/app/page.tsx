@@ -14,11 +14,50 @@ const firebaseConfig = {
   appId: "169734295799",
 };
 
+
 const app = initializeApp(firebaseConfig);
 const storage = getStorage(app);
 
 const PROCESSING_URL_ENDPOINT = 'https://start-processing-t5ugakub7a-uc.a.run.app';
 const CANONICAL_GCS_BUCKET = firebaseConfig.storageBucket;
+
+const HelpBox: React.FC<{ isOpen: boolean, onClose: () => void }> = ({ isOpen, onClose }) => {
+  if (!isOpen) return null;
+
+  // Changed to absolute positioning to sit beneath the parent button container
+  const style = {
+    opacity: isOpen ? 1 : 0,
+    transform: isOpen ? 'translateY(0)' : 'translateY(-10px)',
+    transition: 'opacity 0.3s ease, transform 0.3s ease',
+    position: 'absolute' as const,
+    top: '45px',
+    right: '0',
+    zIndex: 50,
+    width: '300px',
+    boxShadow: '0 8px 16px rgba(0,0,0,0.5)',
+    borderRadius: '8px',
+    backgroundColor: '#1f2937',
+    border: '1px solid #10b981',
+    textAlign: 'left' as const,
+  };
+
+  return (
+    <div 
+      style={style}
+    >
+      <div className="p-4">
+        <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#10b981', marginBottom: '10px' }}>
+          How To Use Scrybe 💡
+        </h3>
+        <p style={{ fontSize: '12px', color: '#ccc', lineHeight: '1.4' }}>
+          <span style={{ display: 'block', marginBottom: '5px' }}>1. Click the box to <strong style={{ fontWeight: 'bold', color: '#fff' }}>upload</strong> a media file.</span>
+          <span style={{ display: 'block', marginBottom: '5px' }}>2. Wait for file to <strong style={{ fontWeight: 'bold', color: '#fff' }}>transcribe</strong>.</span>
+          <span style={{ display: 'block', marginBottom: '5px' }}><strong style={{ fontWeight: 'bold', color: '#fff' }}>That's it!</strong> Your transcription will be displayed on screen and available for download!</span>
+        </p>
+      </div>
+    </div>
+  );
+};
 
 export default function HomePage() {
   const [transcript, setTranscript] = useState<string>('');
@@ -26,6 +65,7 @@ export default function HomePage() {
   const [uploadStatus, setUploadStatus] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   // ---- MATRIX BACKGROUND EFFECT ----
   useEffect(() => {
@@ -209,6 +249,34 @@ export default function HomePage() {
         }}
       >
         <h1 style={{ margin: 0, fontSize: '24px' }}>Scrybe</h1>
+
+        <div style={{ position: 'relative', zIndex: 11 }}>
+            
+            {/* The Toggle Button */}
+            <button
+                onClick={() => setIsHelpOpen(!isHelpOpen)}
+                style={{
+                  fontSize: '14px',
+                  padding: '6px 12px',
+                  backgroundColor: '#10b981', 
+                  color: 'black',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontWeight: 'bold'
+                }}
+              >
+                About Scrybe
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </button>
+            
+            {/* --- RENDER HELP BOX INSIDE THE BUTTON'S CONTAINER --- */}
+            <HelpBox isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+
+        </div>
       </header>
 
       <div

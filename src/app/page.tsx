@@ -233,7 +233,7 @@ export default function HomePage() {
             }}
             onClick={() => fileInputRef.current?.click()}
           >
-            <p>Click to Upload a File</p>
+            <p style={{ fontSize: '20px', color: '#555' }}>Click to Upload a File</p>
             <p style={{ fontSize: '12px', color: '#555' }}>.mp4, .mov, .mp3 only</p>
           </div>
         )}
@@ -281,7 +281,7 @@ export default function HomePage() {
                   height: '100px',
                 }}
               >
-                <p style={{ margin: 0 }}>Upload File</p>
+                <p style={{ fontSize: '20px', color: '#555' }}>Upload File</p>
                 <p style={{ fontSize: '12px', color: '#555' }}>.mp4, .mov, .mp3</p>
               </div>
 
@@ -311,7 +311,7 @@ export default function HomePage() {
                   height: '100px',
                 }}
               >
-                <p style={{ margin: 0 }}>Download File</p>
+                <p style={{ fontSize: '20px', color: '#555' }}>Download File</p>
                 <p style={{ fontSize: '12px', color: '#555' }}>Transcript.txt</p>
               </div>
             </div>
@@ -330,7 +330,7 @@ export default function HomePage() {
                 overflowY: 'auto',          // <-- Enables scrolling
               }}
             >
-              <h2 style={{ marginTop: 0, textAlign: 'center' }}>Transcript:</h2>
+              <h2 style={{ marginTop: 0, textAlign: 'center', color: '#555' }}>Transcript:</h2>
               <p
                 style={{
                   whiteSpace: 'pre-wrap',

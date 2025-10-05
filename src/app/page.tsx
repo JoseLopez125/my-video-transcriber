@@ -4,7 +4,10 @@ import { useState, useRef, ChangeEvent } from 'react';
 
 
 export default function HomePage() {
-  function uploadVideoToGCS(signedUrl, videoFile, gcsPath) {
+  const [transcript, setTranscript] = useState<string>("");
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  function uploadVideoToGCS(signedUrl: string, videoFile: File, gcsPath: string) {
     fetch(signedUrl, {
         method: 'PUT',
         headers: { 
@@ -20,11 +23,13 @@ export default function HomePage() {
             triggerTranscription(gcsPath);
         } else {
             console.error("❌ GCS Upload Failed:", res.statusText);
+            setIsLoading(false);
         }
     });
 }
 // This function name (triggerTranscription) is defined by you.
 function triggerTranscription(gcsPath: string) {
+  setIsLoading(true);
   const PROCESSING_URL = 'https://get-upload-url-t5ugakub7a-uc.a.run.app/start_processing'; 
 
   // Make a final, light POST request to your backend processing function
@@ -40,9 +45,12 @@ function triggerTranscription(gcsPath: string) {
   .then(data => {
       console.log("Processing complete. Transcript/DB response:", data);
       // Display the transcript to the user
+      setTranscript(data.transcript);
+      setIsLoading(false);
   })
   .catch(error => {
       console.error("Error during final processing step:", error);
+      setIsLoading(false);
   });
 }
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -52,6 +60,8 @@ function triggerTranscription(gcsPath: string) {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setTranscript(""); // clear previous transcript
+
     const validTypes = ['video/mp4', 'video/quicktime', 'audio/mpeg'];
     if (!validTypes.includes(file.type)) {
       alert('Invalid file type! Please upload .mp4, .mov, or .mp3');
@@ -60,7 +70,7 @@ function triggerTranscription(gcsPath: string) {
 
     setSelectedFile(file);
     // Assuming 'videoFile' is the File object from your drag-and-drop
-    const GCS_FILENAME = `user-videos/${Date.now()}-${file}`;
+    const GCS_FILENAME = `user-videos/${Date.now()}-${file.name}`;
     const FUNCTION_URL = 'https://get-upload-url-t5ugakub7a-uc.a.run.app'; // Replace this URL
     const fileContentType = file.type ? file.type : 'video/mp4'; 
 
@@ -73,7 +83,7 @@ function triggerTranscription(gcsPath: string) {
     .then(data => {
         if (data.uploadUrl) {
             // Proceed to Step 2
-            uploadVideoToGCS(data.uploadUrl, selectedFile, GCS_FILENAME);
+            uploadVideoToGCS(data.uploadUrl, file, GCS_FILENAME);
         } else {
             console.error("Server denied upload:", data.error);
         }
@@ -147,6 +157,15 @@ function triggerTranscription(gcsPath: string) {
           <p style={{ marginTop: '20px', color: '#333' }}>
             Selected file: {selectedFile.name}
           </p>
+        )}
+
+        {isLoading && <p>Transcribing...</p>}
+
+        {transcript && (
+          <div style={{ marginTop: '20px', padding: '10px', border: '1px solid #ccc', borderRadius: '5px', width: '80%' }}>
+            <h2>Transcript</h2>
+            <p>{transcript}</p>
+          </div>
         )}
       </div>
     </div>

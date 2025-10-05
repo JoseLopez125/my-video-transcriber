@@ -23,7 +23,7 @@ set_global_options(max_instances=10)
 BUCKET_NAME = "myvideotranscriber-video-uploads"
 STORAGE_CLIENT = storage.Client()
 
-def generate_upload_signed_url(blob_name: str):
+def generate_upload_signed_url(blob_name: str, content_type: str):
     """Generates a v4 signed URL for uploading a file."""
     bucket = STORAGE_CLIENT.bucket(BUCKET_NAME)
     blob = bucket.blob(blob_name)
@@ -33,7 +33,7 @@ def generate_upload_signed_url(blob_name: str):
         # URL is valid for 15 minutes
         expiration=timedelta(minutes=15), 
         method="PUT",
-        content_type="video/*" # Require client to upload a video format
+        content_type=content_type
     )
     return url
 
@@ -44,10 +44,13 @@ def get_upload_url(req: https_fn.Request):
         # Get filename from the request body (e.g., user's unique ID + filename)
         body = req.get_json(silent=True)
         filename = body.get("filename")
+        content_type = body.get("Content-Type")
         if not filename:
             return https_fn.Response(json.dumps({"error": "Missing filename"}), status=400)
+        if not content_type:
+            return https_fn.Response(json.dumps({"error": "Missing Content-Type"}), status=400)
 
-        signed_url = generate_upload_signed_url(filename)
+        signed_url = generate_upload_signed_url(filename, content_type)
         
         return https_fn.Response(json.dumps({"uploadUrl": signed_url}), status=200, mimetype="application/json")
     
@@ -76,6 +79,7 @@ def get_transcript(file_path:str):
 
     result = operation.result(timeout=600)
 
+    transcript = ""
     # There is only one annotation_result since only
     # one video is processed.
     annotation_results = result.annotation_results[0]
@@ -85,10 +89,11 @@ def get_transcript(file_path:str):
         # Each alternative is a different possible transcription
         # and has its own confidence score.
         for alternative in speech_transcription.alternatives:
+            transcript += alternative.transcript
             print("Alternative level information:")
 
             print("Transcript: {}".format(alternative.transcript))
-            print("Confidence: {}\n".format(alternative.confidence))
+            print("Confidence: \n".format(alternative.confidence))
 
             print("Word level information:")
             for word_info in alternative.words:
@@ -102,20 +107,31 @@ def get_transcript(file_path:str):
                         word,
                     )
                 )
-    @https_fn.on_request()
-    def start_processing(req: https_fn.Request):
-        """Triggers the transcription process and saves the video reference."""
-        body = req.get_json(silent=True)
-        gcs_path = body.get("gcsPath")
+    return transcript
+
+@https_fn.on_request()
+def start_processing(req: https_fn.Request):
+    """Triggers the transcription process and saves the video reference."""
+    body = req.get_json(silent=True)
+    gcs_path = body.get("gcsPath")
+    
+    if not gcs_path:
+        return https_fn.Response(json.dumps({"error": "Missing GCS path"}), status=400)
         
-        if not gcs_path:
-            return https_fn.Response(json.dumps({"error": "Missing GCS path"}), status=400)
-            
-        # 1. Update the 'path' variable in get_transcript to use gcs_path
-        # 2. Call get_transcript(gcs_path) (You need to modify get_transcript to accept path)
-        # 3. Save gcs_path to your database here.
-        
-        return https_fn.Response(json.dumps({"status": "Processing started"}), status=200, mimetype="application/json")
+    # Extract the file path from the GCS URI
+    # e.g. from "gs://my-bucket/my-folder/my-file.txt" to "my-folder/my-file.txt"
+    if gcs_path.startswith(f"gs://{BUCKET_NAME}/"):
+        file_path = gcs_path[len(f"gs://{BUCKET_NAME}/"):]
+    else:
+        file_path = gcs_path
+
+    try:
+        transcript = get_transcript(file_path)
+        # TODO: Save transcript to database
+        return https_fn.Response(json.dumps({"status": "Processing complete", "transcript": transcript}), status=200, mimetype="application/json")
+    except Exception as e:
+        print(f"Error during transcription: {e}")
+        return https_fn.Response(json.dumps({"error": str(e)}), status=500)
 
 
 initialize_app()

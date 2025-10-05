@@ -1,12 +1,12 @@
+// Example of a minimal rule for testing UNauthenticated uploads:
 rules_version = '2';
-
-// Craft rules based on data in your Firestore database
-// allow write: if firestore.get(
-//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read, write: if false;
+    // Allows any unauthenticated user to write files into the 'user-videos' folder
+    // Note: Use this ONLY for testing, not production.
+    match /user-videos/{allPaths=**} {
+      allow write: if true; 
+      allow read: if true;
     }
   }
 }

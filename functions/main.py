@@ -1,64 +1,40 @@
 # Welcome to Cloud Functions for Firebase for Python!
-# To get started, simply uncomment the below code or create your own.
 # Deploy with `firebase deploy`
 
 from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
 from firebase_admin import initialize_app
-from google.cloud import storage
+from google.cloud import storage # Required for its GCS object types, though not for client creation
 from datetime import timedelta
 from google.cloud import videointelligence
 import json
+import os
+from firebase_admin import functions # Required for config access in legacy runtimes
 
-# For cost control, you can set the maximum number of containers that can be
-# running at the same time. This helps mitigate the impact of unexpected
-# traffic spikes by instead downgrading performance. This limit is a per-function
-# limit. You can override the limit for each function using the max_instances
-# parameter in the decorator, e.g. @https_fn.on_request(max_instances=5).
 set_global_options(max_instances=10)
 
+# Initialize Firebase Admin SDK globally. This grants the function implicit access 
+# to Firebase services like Storage and the Video Intelligence API.
+initialize_app()
 
-# functions/main.py
+# We set BUCKET_NAME globally for use in the GCS URI f-string within get_transcript.
+# NOTE: You should set BUCKET_NAME environment variable to your Appspot bucket name upon deployment
+BUCKET_NAME = os.environ.get("BUCKET_NAME", "myvideotranscriber.firebasestorage.app") 
 
-BUCKET_NAME = "myvideotranscriber-video-uploads"
-STORAGE_CLIENT = storage.Client()
 
-def generate_upload_signed_url(blob_name: str, content_type: str):
-    """Generates a v4 signed URL for uploading a file."""
-    bucket = STORAGE_CLIENT.bucket(BUCKET_NAME)
-    blob = bucket.blob(blob_name)
-
-    url = blob.generate_signed_url(
-        version="v4",
-        # URL is valid for 15 minutes
-        expiration=timedelta(minutes=15), 
-        method="PUT",
-        content_type=content_type
-    )
-    return url
-
-@https_fn.on_request()
-def get_upload_url(req: https_fn.Request):
-    """API endpoint to request a signed URL."""
-    try:
-        # Get filename from the request body (e.g., user's unique ID + filename)
-        body = req.get_json(silent=True)
-        filename = body.get("filename")
-        content_type = body.get("Content-Type")
-        if not filename:
-            return https_fn.Response(json.dumps({"error": "Missing filename"}), status=400)
-        if not content_type:
-            return https_fn.Response(json.dumps({"error": "Missing Content-Type"}), status=400)
-
-        signed_url = generate_upload_signed_url(filename, content_type)
-        
-        return https_fn.Response(json.dumps({"uploadUrl": signed_url}), status=200, mimetype="application/json")
+def get_transcript(file_path: str):
+    """
+    Triggers the Video Intelligence API to transcribe the video at the given GCS URI.
     
-    except Exception as e:
-        print(f"Error generating signed URL: {e}")
-        return https_fn.Response(json.dumps({"error": str(e)}), status=500)
-
-def get_transcript(file_path:str):
+    Args:
+        file_path (str): The full GCS URI (gs://bucket-name/path/file.mp4).
+        
+    Returns:
+        str: The full transcribed text.
+    """
+    
+    # The video client automatically uses the function's service account credentials 
+    # to access the file in the GCS bucket specified by input_uri.
     video_client = videointelligence.VideoIntelligenceServiceClient()
     features = [videointelligence.Feature.SPEECH_TRANSCRIPTION]
 
@@ -67,76 +43,73 @@ def get_transcript(file_path:str):
     )
     video_context = videointelligence.VideoContext(speech_transcription_config=config)
 
+    # The API is called with the full GCS URI provided by the frontend.
     operation = video_client.annotate_video(
         request={
             "features": features,
-            "input_uri": f"gs://{BUCKET_NAME}/{file_path}",
+            "input_uri": file_path, 
             "video_context": video_context,
         }
     )
 
-    print("\nProcessing video for speech transcription.")
+    print(f"\nProcessing video at {file_path} for speech transcription. This is a long-running operation.")
 
-    result = operation.result(timeout=600)
+    # This is a blocking call (waits up to 10 minutes) for the result.
+    result = operation.result(timeout=600) 
 
     transcript = ""
-    # There is only one annotation_result since only
-    # one video is processed.
-    annotation_results = result.annotation_results[0]
-    for speech_transcription in annotation_results.speech_transcriptions:
-        # The number of alternatives for each transcription is limited by
-        # SpeechTranscriptionConfig.max_alternatives.
-        # Each alternative is a different possible transcription
-        # and has its own confidence score.
-        for alternative in speech_transcription.alternatives:
-            transcript += alternative.transcript
-            print("Alternative level information:")
-
-            print("Transcript: {}".format(alternative.transcript))
-            print("Confidence: \n".format(alternative.confidence))
-
-            print("Word level information:")
-            for word_info in alternative.words:
-                word = word_info.word
-                start_time = word_info.start_time
-                end_time = word_info.end_time
-                print(
-                    "\t{}s - {}s: {}".format(
-                        start_time.seconds + start_time.microseconds * 1e-6,
-                        end_time.seconds + end_time.microseconds * 1e-6,
-                        word,
-                    )
-                )
+    if result.annotation_results:
+        annotation_results = result.annotation_results[0]
+        if annotation_results.speech_transcriptions:
+            # Aggregate the best transcript alternative
+            for speech_transcription in annotation_results.speech_transcriptions:
+                if speech_transcription.alternatives:
+                    # Append the transcript text
+                    transcript += speech_transcription.alternatives[0].transcript
+    
     return transcript
 
+# The only exposed HTTP function now is the processing trigger.
 @https_fn.on_request()
 def start_processing(req: https_fn.Request):
-    """Triggers the transcription process and saves the video reference."""
-    body = req.get_json(silent=True)
-    gcs_path = body.get("gcsPath")
+    """
+    Receives the GCS path from the client after the file upload, 
+    triggers transcription, and returns the result.
+    """
     
-    if not gcs_path:
-        return https_fn.Response(json.dumps({"error": "Missing GCS path"}), status=400)
+    # --- CORS Headers (Required for communication with React frontend) ---
+    headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Max-Age': '3600'
+    }
+    
+    if req.method == 'OPTIONS':
+        return https_fn.Response('', status=204, headers=headers)
         
-    # Extract the file path from the GCS URI
-    # e.g. from "gs://my-bucket/my-folder/my-file.txt" to "my-folder/my-file.txt"
-    if gcs_path.startswith(f"gs://{BUCKET_NAME}/"):
-        file_path = gcs_path[len(f"gs://{BUCKET_NAME}/"):]
-    else:
-        file_path = gcs_path
-
     try:
-        transcript = get_transcript(file_path)
-        # TODO: Save transcript to database
-        return https_fn.Response(json.dumps({"status": "Processing complete", "transcript": transcript}), status=200, mimetype="application/json")
+        body = req.get_json(silent=True)
+        # Frontend sends the full GCS URI (gs://bucket/path/file.mp4)
+        gcs_path = body.get("gcsPath") 
+        
+        if not gcs_path:
+            return https_fn.Response(json.dumps({"error": "Missing GCS path in request body."}), status=400, headers=headers)
+            
+        # Call the transcription function (blocking call)
+        final_transcript = get_transcript(gcs_path) 
+        
+        # NOTE: This is where you would typically save the transcript and path to a database.
+        
+        return https_fn.Response(
+            json.dumps({"status": "Success", "transcript": final_transcript}), 
+            status=200, 
+            mimetype="application/json",
+            headers=headers
+        )
+        
     except Exception as e:
-        print(f"Error during transcription: {e}")
-        return https_fn.Response(json.dumps({"error": str(e)}), status=500)
+        print(f"Transcription failed: {e}")
+        return https_fn.Response(json.dumps({"error": f"Transcription failed: {str(e)}"}), status=500, headers=headers)
 
-
-initialize_app()
-#
-#
-# @https_fn.on_request()
-# def on_request_example(req: https_fn.Request) -> https_fn.Response:
-#     return https_fn.Response("Hello world!")
+# NOTE: The unused get_upload_url and related functions from the previous GCS workflow are removed here for cleanliness.

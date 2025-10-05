@@ -57,25 +57,56 @@ def get_transcript(file_path: str):
     # This is a blocking call (waits up to 10 minutes) for the result.
     result = operation.result(timeout=600) 
 
+    max_chars_per_line = 80
     transcript = ""
-    if result.annotation_results:
+
+    if result.annotation_results and result.annotation_results[0].speech_transcriptions:
         annotation_results = result.annotation_results[0]
         for speech_transcription in annotation_results.speech_transcriptions:
-            # The number of alternatives for each transcription is limited by
-            # SpeechTranscriptionConfig.max_alternatives.
-            # Each alternative is a different possible transcription
-            # and has its own confidence score.
-            for alternative in speech_transcription.alternatives:
-                for word_info in alternative.words:
-                    word = word_info.word
-                    start_time = word_info.start_time
-                    end_time = word_info.end_time
-                    transcript += "\t{}s - {}s: {}\n".format(
-                            start_time.seconds + start_time.microseconds * 1e-6,
-                            end_time.seconds + end_time.microseconds * 1e-6,
-                            word,
-                        )
+            if not speech_transcription.alternatives:
+                continue
 
+            # Process the best alternative
+            alternative = speech_transcription.alternatives[0]
+            if not alternative.words:
+                continue
+
+            # Logic to build lines word-by-word
+            current_line = ""
+            line_start_time = None
+            
+            for word_info in alternative.words:
+                # If the line is empty, this is the first word. Set the start time.
+                if not current_line:
+                    line_start_time = word_info.start_time
+
+                # Check if adding the next word exceeds the max character limit
+                if len(current_line) + len(word_info.word) > max_chars_per_line:
+                    # The line is full. Finalize it.
+                    # The end time is the end time of the previous word.
+                    line_end_time = previous_word_info.end_time
+                    
+                    # Format the timestamps and the line
+                    start_s = line_start_time.seconds + line_start_time.microseconds * 1e-6
+                    end_s = line_end_time.seconds + line_end_time.microseconds * 1e-6
+                    transcript += f"[{start_s:.2f}s - {end_s:.2f}s] {current_line.strip()}\n"
+                    
+                    # Start a new line with the current word
+                    current_line = word_info.word + " "
+                    line_start_time = word_info.start_time
+                else:
+                    # Add the word to the current line
+                    current_line += word_info.word + " "
+
+                # Keep track of the current word to get its end time for the next iteration
+                previous_word_info = word_info
+
+            # After the loop, add the last remaining line to the transcript
+            if current_line:
+                line_end_time = previous_word_info.end_time
+                start_s = line_start_time.seconds + line_start_time.microseconds * 1e-6
+                end_s = line_end_time.seconds + line_end_time.microseconds * 1e-6
+                transcript += f"[{start_s:.2f}s - {end_s:.2f}s] {current_line.strip()}\n"
     return transcript
 
 # The only exposed HTTP function now is the processing trigger.

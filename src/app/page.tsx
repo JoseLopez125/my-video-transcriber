@@ -17,7 +17,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const storage = getStorage(app);
 
-// ✅ Replace this with your backend endpoint
 const PROCESSING_URL_ENDPOINT = 'https://start-processing-t5ugakub7a-uc.a.run.app';
 const CANONICAL_GCS_BUCKET = firebaseConfig.storageBucket;
 
@@ -62,7 +61,6 @@ export default function HomePage() {
         if (y > canvas.height && Math.random() > 0.975) {
           drops[i] = 0;
         }
-
         drops[i] += 0.4;
       }
 
@@ -145,7 +143,7 @@ export default function HomePage() {
     link.click();
   };
 
-  // ---- UPLOADING DOTS (with white fading animation) ----
+  // ---- UPLOADING DOTS ----
   const LoadingDots = () => {
     const [dots, setDots] = useState('');
     useEffect(() => {
@@ -318,6 +316,7 @@ export default function HomePage() {
               </div>
             </div>
 
+            {/* ---- SCROLLABLE TRANSCRIPT BOX ---- */}
             <div
               style={{
                 width: '70%',
@@ -327,10 +326,21 @@ export default function HomePage() {
                 padding: '20px',
                 backgroundColor: 'rgba(255, 255, 255, 0.9)',
                 textAlign: 'left',
+                maxHeight: '400px',        // <-- Scroll limit
+                overflowY: 'auto',          // <-- Enables scrolling
               }}
             >
               <h2 style={{ marginTop: 0, textAlign: 'center' }}>Transcript:</h2>
-              <p style={{ whiteSpace: 'pre-wrap' }}>{transcript}</p>
+              <p
+                style={{
+                  whiteSpace: 'pre-wrap',
+                  lineHeight: 1.6,
+                  fontSize: '14px',
+                  color: '#333',
+                }}
+              >
+                {transcript}
+              </p>
             </div>
           </>
         )}

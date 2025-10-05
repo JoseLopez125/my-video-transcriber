@@ -60,13 +60,22 @@ def get_transcript(file_path: str):
     transcript = ""
     if result.annotation_results:
         annotation_results = result.annotation_results[0]
-        if annotation_results.speech_transcriptions:
-            # Aggregate the best transcript alternative
-            for speech_transcription in annotation_results.speech_transcriptions:
-                if speech_transcription.alternatives:
-                    # Append the transcript text
-                    transcript += speech_transcription.alternatives[0].transcript
-    
+        for speech_transcription in annotation_results.speech_transcriptions:
+            # The number of alternatives for each transcription is limited by
+            # SpeechTranscriptionConfig.max_alternatives.
+            # Each alternative is a different possible transcription
+            # and has its own confidence score.
+            for alternative in speech_transcription.alternatives:
+                for word_info in alternative.words:
+                    word = word_info.word
+                    start_time = word_info.start_time
+                    end_time = word_info.end_time
+                    transcript += "\t{}s - {}s: {}\n".format(
+                            start_time.seconds + start_time.microseconds * 1e-6,
+                            end_time.seconds + end_time.microseconds * 1e-6,
+                            word,
+                        )
+
     return transcript
 
 # The only exposed HTTP function now is the processing trigger.

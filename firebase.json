@@ -9,7 +9,8 @@
         "firebase-debug.log",
         "firebase-debug.*.log",
         "functions"
-      ]
+      ],
+      "alwaysDeployFromSource": true
     }
   ],
   "firestore": {
@@ -27,12 +28,16 @@
         ".git",
         "firebase-debug.log",
         "firebase-debug.*.log",
-        "*.local"
+        "*.local",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        ".runtimeconfig.json"
       ],
       "runtime": "python313"
     }
   ],
   "storage": {
-    "rules": "storage.rules"
+    "rules": "storage.rules",
+    "bucket": "myvideotranscriber.firebasestorage.app"
   }
 }

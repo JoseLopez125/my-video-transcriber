@@ -10,6 +10,7 @@ from google.cloud import videointelligence
 import json
 import os
 from firebase_admin import functions # Required for config access in legacy runtimes
+from firebase_admin import firestore
 
 set_global_options(max_instances=10)
 
@@ -21,6 +22,20 @@ initialize_app()
 # NOTE: You should set BUCKET_NAME environment variable to your Appspot bucket name upon deployment
 BUCKET_NAME = os.environ.get("BUCKET_NAME", "myvideotranscriber.firebasestorage.app") 
 
+db = firestore.client()
+def create_initial_job_record(user_id: str, filename: str, gcs_uri: str, final_transcript: str) -> str:
+    """Creates a complete job record in Firestore and returns the document ID."""
+    doc_ref = db.collection("transcripts").add({
+        'userId': user_id,
+        'originalFilename': filename,
+        'gcsUri': gcs_uri,
+        'transcript': final_transcript, # Storing the transcript directly
+        'status': 'COMPLETE',
+        'createdAt': firestore.SERVER_TIMESTAMP,
+        'completedAt': firestore.SERVER_TIMESTAMP,
+    })
+    # doc_ref is a tuple: (update_time, DocumentReference). We return the ID.
+    return doc_ref[1].id
 
 def get_transcript(file_path: str):
     """
@@ -130,16 +145,25 @@ def start_processing(req: https_fn.Request):
         
     try:
         body = req.get_json(silent=True)
-        # Frontend sends the full GCS URI (gs://bucket/path/file.mp4)
-        gcs_path = body.get("gcsPath") 
         
-        if not gcs_path:
-            return https_fn.Response(json.dumps({"error": "Missing GCS path in request body."}), status=400, headers=headers)
+        # Retrieve variables from the JSON body
+        gcs_path = body.get("gcsPath") 
+        user_id = body.get("userId") 
+        original_filename = body.get("originalFilename")
+        
+        if not gcs_path or not user_id or not original_filename:
+            return https_fn.Response(json.dumps({
+                "error": "Missing gcsPath, userId, or originalFilename in request body."
+            }), status=400, headers=headers)
             
-        # Call the transcription function (blocking call)
         final_transcript = get_transcript(gcs_path) 
         
-        # NOTE: This is where you would typically save the transcript and path to a database.
+        firestore_id = create_initial_job_record(
+            user_id, 
+            original_filename, 
+            gcs_path, 
+            final_transcript
+        )
         
         return https_fn.Response(
             json.dumps({"status": "Success", "transcript": final_transcript}), 
